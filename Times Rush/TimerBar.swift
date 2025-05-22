@@ -13,6 +13,7 @@ class TimerBar {
     var timer: Timer?
     let totalTime: Float
     var startTime: Date?
+    var onTimeUp: (() -> Void)?
     
     init(totalTime: Float){
         self.totalTime = totalTime
@@ -26,6 +27,20 @@ class TimerBar {
         startTime = Date()
         timer = Timer.scheduledTimer(timeInterval: 0.02, target: self, selector: #selector(updateTimerBar), userInfo: nil, repeats: true)
        }
+    
+    func resetTimer(){
+        timer?.invalidate()
+        timer = nil
+        timerBar.setProgress(1.0, animated: false)
+        startTime = nil
+    }
+    
+    func adjustTime(_ seconds: Float) {
+        guard let startTime = startTime else { return }
+        self.startTime = startTime.addingTimeInterval(TimeInterval(-seconds))
+        updateTimerBar()
+    }
+
     
     @objc func updateTimerBar() {
         guard let startTime = startTime else { return }
@@ -42,6 +57,7 @@ class TimerBar {
             timer = nil
             timerBar.setProgress(0.0, animated: true)
             print("Tempo acabou!")
+            onTimeUp?()
         }
     }
 
