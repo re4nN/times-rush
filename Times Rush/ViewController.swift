@@ -11,6 +11,25 @@ class ViewController: UIViewController {
     
     var timerBar: TimerBar!
     var timesService: TimesServices!
+    private var isTimerStarted = false
+    
+    
+    private lazy var blurView: UIVisualEffectView = {
+        let blurEffect = UIBlurEffect(style: .dark)
+        let view = UIVisualEffectView(effect: blurEffect)
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+    
+    private lazy var startLabel: UILabel = {
+        let label = UILabel()
+        label.text = "Tap to Start"
+        label.font = UIFont.systemFont(ofSize: 24, weight: .bold)
+        label.textColor = .white
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
     
     private lazy var backgroundView: UIImageView = {
         let imageView = UIImageView()
@@ -31,9 +50,8 @@ class ViewController: UIViewController {
     }()
     
     private lazy var timesLabel: UILabel = {
-        let times = timesService.genTimes()
         let label = UILabel()
-        label.text = "\(times.0) X \(times.1)"
+        label.text = "0 x 0"
         label.translatesAutoresizingMaskIntoConstraints = false
         label.textAlignment = .center
         label.font = UIFont.systemFont(ofSize: 48, weight: .regular)
@@ -48,11 +66,15 @@ class ViewController: UIViewController {
         return view
     }()
     
-    private lazy var containerView: UIView = {
-        let view = UIView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
+   private let answersVerticalStackView: UIStackView = {
+        let verticalStackView = UIStackView()
+       verticalStackView.axis = .vertical
+       verticalStackView.spacing = 10
+       verticalStackView.alignment = .center
+       verticalStackView.translatesAutoresizingMaskIntoConstraints = false
+       return verticalStackView
     }()
+    
     
     // MARK: - Initializer
     init(timesService: TimesServices) {
@@ -72,13 +94,17 @@ class ViewController: UIViewController {
         view.addSubview(timerBar.timerBar)
         setupTimerBarConstraints()
         
-        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(startTimerOnTap))
+        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleFirstTap(_:)))
         view.addGestureRecognizer(tapGestureRecognizer)
+        
+        
+
     }
     
     private func setupView() {
         setHierarchy()
         setConstraints()
+        setupAnswersStackView()
     }
     
     private func setHierarchy() {
@@ -86,6 +112,9 @@ class ViewController: UIViewController {
         view.addSubview(solveLabel)
         view.addSubview(timesLabel)
         view.addSubview(dividerView)
+        view.addSubview(answersVerticalStackView)
+        view.addSubview(blurView)
+        blurView.contentView.addSubview(startLabel)
     }
     
     private func setConstraints() {
@@ -114,6 +143,16 @@ class ViewController: UIViewController {
             dividerView.widthAnchor.constraint(equalToConstant: 350),
             dividerView.heightAnchor.constraint(equalToConstant: 2)
         ])
+        
+        NSLayoutConstraint.activate([
+            blurView.topAnchor.constraint(equalTo: view.topAnchor),
+            blurView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            blurView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            blurView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            
+            startLabel.centerXAnchor.constraint(equalTo: blurView.centerXAnchor),
+            startLabel.centerYAnchor.constraint(equalTo: blurView.centerYAnchor)
+        ])
     }
     
     private func setupTimerBarConstraints() {
@@ -127,11 +166,78 @@ class ViewController: UIViewController {
         ])
     }
     
-    @objc func startTimerOnTap() {
+    private func setupAnswersStackView(){
+        let firstRow = createHorizontalStackView(buttonTitles: ["1", "2"])
+        let secondRow = createHorizontalStackView(buttonTitles: ["3", "4"])
+        
+        answersVerticalStackView.addArrangedSubview(firstRow)
+        answersVerticalStackView.addArrangedSubview(secondRow)
+        
+        NSLayoutConstraint.activate([
+            answersVerticalStackView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: 30),
+            answersVerticalStackView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            answersVerticalStackView.widthAnchor.constraint(equalToConstant: 200)
+        ])
+    }
+    
+    
+    private func createHorizontalStackView(buttonTitles: [String]) -> UIStackView {
+        let stackView = UIStackView()
+        stackView.axis = .horizontal
+        stackView.spacing = 25
+        stackView.distribution = .fillEqually
+        
+        for title in buttonTitles {
+            let button = createAnswerButton(title: title)
+            stackView.addArrangedSubview(button)
+        }
+        
+        return stackView
+    }
+    
+    private func createAnswerButton(title: String) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle(title, for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 24, weight: .bold)
+        button.setTitleColor(.white, for: .normal)
+        button.layer.cornerRadius = 22.5
+        button.layer.borderWidth = 3
+        button.layer.borderColor = UIColor.yellowMainColorAsset?.cgColor
+        button.addTarget(self, action: #selector(answerTapped(_:)), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 45).isActive = true
+        return button
+        
+    }
+    
+    @objc func answerTapped(_ sender: UIButton) {
+        guard let title = sender.titleLabel?.text else { return }
+        print("Botão \(title) pressionado")
+    
         let newTimes = timesService.genTimes()
         
         timesLabel.text = "\(newTimes.0) X \(newTimes.1)"
-        timerBar.startTimer()
+    }
+    
+    @objc private func handleFirstTap(_ sender: UITapGestureRecognizer) {
+        if !isTimerStarted {
+            isTimerStarted = true
+            startTimerOnTap()
+            timerBar.startTimer()
+            
+            UIView.animate(withDuration: 0.5, animations: {
+                self.blurView.alpha = 0
+            }) { _ in
+                self.blurView.removeFromSuperview()
+            }
+        }
+    }
+    
+    @objc func startTimerOnTap() {
+        let newTimes = timesService.genTimes()
+        timesLabel.text = "\(newTimes.0) X \(newTimes.1)"
+
     }
     
 }
