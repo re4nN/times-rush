@@ -12,6 +12,10 @@ class ViewController: UIViewController {
     var timerBar: TimerBar!
     var timesService: TimesServices!
     private var isTimerStarted = false
+    private var correctAnswers: [(question: String, answer: Int)] = []
+    private var totalAttempts = 0
+    private var currentMultiplicand: Int = 0
+    private var currentMultiplier: Int = 0
     
     
     private lazy var blurView: UIVisualEffectView = {
@@ -61,9 +65,20 @@ class ViewController: UIViewController {
     
     private lazy var dividerView: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor.yellowMainColorAsset
+        view.backgroundColor = UIColor.yellowMainColorAsset ?? .yellow
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
+    }()
+    
+    
+    private lazy var resultLabel: UILabel = {
+        let label = UILabel()
+        label.text = ""
+        label.font = UIFont.systemFont(ofSize: 20, weight: .medium)
+        label.textColor = .white
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
     }()
     
    private let answersVerticalStackView: UIStackView = {
@@ -74,6 +89,8 @@ class ViewController: UIViewController {
        verticalStackView.translatesAutoresizingMaskIntoConstraints = false
        return verticalStackView
     }()
+    
+
     
     
     // MARK: - Initializer
@@ -90,6 +107,18 @@ class ViewController: UIViewController {
         setupView()
         
         timerBar = TimerBar(totalTime: 30.0)
+        timerBar.onTimeUp = {[weak self] in
+            guard let self = self else { return }
+            let correct = self.correctAnswers.count
+            let wrong = self.totalAttempts - correct
+            
+            self.resultLabel.text = "Correct Answers: \(correct)\nWrong Answers: \(wrong)\n\nTap to start again!"
+            
+            self.correctAnswers.removeAll()
+            self.totalAttempts = 0
+            self.showStartBlur()
+        }
+        
 
         view.addSubview(timerBar.timerBar)
         setupTimerBarConstraints()
@@ -97,8 +126,6 @@ class ViewController: UIViewController {
         let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleFirstTap(_:)))
         view.addGestureRecognizer(tapGestureRecognizer)
         
-        
-
     }
     
     private func setupView() {
@@ -115,6 +142,7 @@ class ViewController: UIViewController {
         view.addSubview(answersVerticalStackView)
         view.addSubview(blurView)
         blurView.contentView.addSubview(startLabel)
+        blurView.contentView.addSubview(resultLabel)
     }
     
     private func setConstraints() {
@@ -153,6 +181,11 @@ class ViewController: UIViewController {
             startLabel.centerXAnchor.constraint(equalTo: blurView.centerXAnchor),
             startLabel.centerYAnchor.constraint(equalTo: blurView.centerYAnchor)
         ])
+        
+        NSLayoutConstraint.activate([
+            resultLabel.topAnchor.constraint(equalTo: startLabel.bottomAnchor, constant: 16),
+            resultLabel.centerXAnchor.constraint(equalTo: blurView.centerXAnchor)
+        ])
     }
     
     private func setupTimerBarConstraints() {
@@ -167,14 +200,14 @@ class ViewController: UIViewController {
     }
     
     private func setupAnswersStackView(){
-        let firstRow = createHorizontalStackView(buttonTitles: ["1", "2"])
-        let secondRow = createHorizontalStackView(buttonTitles: ["3", "4"])
+        let firstRow = createHorizontalStackView(buttonTitles: ["", ""])
+        let secondRow = createHorizontalStackView(buttonTitles: ["", ""])
         
         answersVerticalStackView.addArrangedSubview(firstRow)
         answersVerticalStackView.addArrangedSubview(secondRow)
         
         NSLayoutConstraint.activate([
-            answersVerticalStackView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: 30),
+            answersVerticalStackView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: 60),
             answersVerticalStackView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             answersVerticalStackView.widthAnchor.constraint(equalToConstant: 200)
         ])
@@ -211,15 +244,63 @@ class ViewController: UIViewController {
         
     }
     
-    @objc func answerTapped(_ sender: UIButton) {
-        guard let title = sender.titleLabel?.text else { return }
-        print("Botão \(title) pressionado")
-    
-        let newTimes = timesService.genTimes()
+    private func showStartBlur() {
+        isTimerStarted = false
         
-        timesLabel.text = "\(newTimes.0) X \(newTimes.1)"
+        view.addSubview(blurView)
+        blurView.alpha = 0
+        
+        NSLayoutConstraint.activate([
+            blurView.topAnchor.constraint(equalTo: view.topAnchor),
+            blurView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            blurView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            blurView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        
+        UIView.animate(withDuration: 0.5){
+            self.blurView.alpha = 1
+        }
     }
     
+    private func updateAnswerButtons(with answers: [Int]) {
+        var index = 0
+        for case let horizontalStack as UIStackView in answersVerticalStackView.arrangedSubviews {
+            for case let button as UIButton in horizontalStack.arrangedSubviews {
+                if index < answers.count {
+                    button.setTitle("\(answers[index])", for: .normal)
+                    index += 1
+                }
+            }
+        }
+    }
+
+    
+    @objc func answerTapped(_ sender: UIButton) {
+        guard let title = sender.titleLabel?.text,
+            let selectedAnswer = Int(title) else { return }
+        
+        let correctAnswer = currentMultiplicand * currentMultiplier
+        let question = "\(currentMultiplicand) X \(currentMultiplier)"
+        
+        totalAttempts += 1
+        
+        if selectedAnswer == correctAnswer {
+            correctAnswers.append((question: question, answer: correctAnswer))
+            timerBar.adjustTime(-3.2)
+        }else{
+            timerBar.adjustTime(4)
+        }
+        
+        
+        let newTimes = timesService.genTimes()
+        currentMultiplicand = newTimes.0
+        currentMultiplier = newTimes.1
+        timesLabel.text = "\(newTimes.0) X \(newTimes.1)"
+        
+        let answers = timesService.genAnswer(multiplicand: newTimes.0, multiplier: newTimes.1)
+        updateAnswerButtons(with: answers)
+        }
+            
     @objc private func handleFirstTap(_ sender: UITapGestureRecognizer) {
         if !isTimerStarted {
             isTimerStarted = true
@@ -237,7 +318,16 @@ class ViewController: UIViewController {
     @objc func startTimerOnTap() {
         let newTimes = timesService.genTimes()
         timesLabel.text = "\(newTimes.0) X \(newTimes.1)"
-
+        currentMultiplicand = newTimes.0
+        currentMultiplier = newTimes.1
+        
+        let answers = timesService.genAnswer(multiplicand: newTimes.0, multiplier: newTimes.1)
+        updateAnswerButtons(with: answers)
+        
+        
+        
     }
-    
 }
+    
+    
+
